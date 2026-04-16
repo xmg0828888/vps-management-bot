@@ -597,15 +597,40 @@ menu_client() {
             echo "TikTok: $(dig +short tiktok.com @127.0.0.1 2>/dev/null | head -1)"
             ;;
         5)
-            echo -e "${RED}确定要卸载 smartdns？(y/n): ${NC}"
+            echo -e "${RED}确定要卸载并恢复原状？(y/n): ${NC}"
             read -p "" confirm
             [[ "$confirm" == "y" ]] && {
-                systemctl stop smartdns
-                systemctl disable smartdns
+                echo -e "${YELLOW}正在卸载 smartdns...${NC}"
+                systemctl stop smartdns 2>/dev/null || true
+                systemctl disable smartdns 2>/dev/null || true
+                pkill -9 smartdns 2>/dev/null || true
+                
+                # 恢复原 DNS
                 chattr -i /etc/resolv.conf 2>/dev/null || true
-                [[ -f /etc/resolv.conf.bak ]] && mv /etc/resolv.conf.bak /etc/resolv.conf
+                if [[ -f /etc/resolv.conf.bak ]]; then
+                    mv /etc/resolv.conf.bak /etc/resolv.conf
+                    echo -e "${GREEN}已恢复原 DNS 配置${NC}"
+                else
+                    # 创建默认 DNS 配置
+                    cat > /etc/resolv.conf << 'EOF'
+nameserver 8.8.8.8
+nameserver 1.1.1.1
+EOF
+                    echo -e "${GREEN}已恢复默认 DNS${NC}"
+                fi
+                
+                # 删除 smartdns
                 rm -rf /etc/smartdns
-                echo -e "${GREEN}smartdns 已卸载${NC}"
+                rm -f /var/run/smartdns.pid
+                
+                # 可选：卸载软件包
+                read -p "是否同时卸载 smartdns 软件包？(y/n): " remove_pkg
+                [[ "$remove_pkg" == "y" ]] && {
+                    apt remove -y smartdns 2>/dev/null || yum remove -y smartdns 2>/dev/null || true
+                    echo -e "${GREEN}smartdns 软件包已卸载${NC}"
+                }
+                
+                echo -e "${GREEN}=== 卸载完成，系统已恢复原状 ===${NC}"
             }
             ;;
         *)
