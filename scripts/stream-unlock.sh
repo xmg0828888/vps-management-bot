@@ -462,14 +462,9 @@ menu_unlocker() {
     case $choice in
         1)
             install_sniproxy
-            echo ""
-            read -p "是否现在添加解锁服务？(y/n): " add_service
-            [[ "$add_service" == "y" ]] && {
-                local services=$(select_services)
-                for svc in $services; do
-                    add_service_to_sniproxy "$svc"
-                done
-            }
+            # 解锁机不需要选服务，sniproxy 配置已包含常见域名
+            echo -e "${GREEN}解锁机配置完成！${NC}"
+            echo -e "${YELLOW}下一步：在被解锁机上运行此脚本，选择「被解锁机」模式${NC}"
             ;;
         2)
             configure_firewall_unlocker
