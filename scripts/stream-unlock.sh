@@ -242,10 +242,13 @@ configure_firewall_unlocker() {
     
     # 开放本地 DNS
     if [[ "$OS" == "debian" ]]; then
+        # 先放行 SSH，防止把自己锁在外面
+        ufw allow 22/tcp comment 'SSH'
         ufw allow 53/udp
         ufw allow 53/tcp
         ufw --force enable
     else
+        firewall-cmd --permanent --add-port=22/tcp
         firewall-cmd --permanent --add-port=53/udp
         firewall-cmd --permanent --add-port=53/tcp
         firewall-cmd --reload
