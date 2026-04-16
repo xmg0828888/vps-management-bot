@@ -445,8 +445,10 @@ select_services() {
     echo "  7) Claude 详细"
     echo "  8) 全部"
     echo ""
+    echo -e "${GREEN}示例：输入 2 只解锁 AI；输入 1 2 3 解锁流媒体+AI+短视频${NC}"
+    echo ""
     
-    read -p "请输入选项 (如: 1 2 3): " choices
+    read -p "请输入选项: " choices
     
     for choice in $choices; do
         case $choice in
