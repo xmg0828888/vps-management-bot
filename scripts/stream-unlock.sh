@@ -88,10 +88,27 @@ detect_os() {
     elif [[ -f /etc/redhat-release ]]; then
         OS="centos"
         PKG_MANAGER="yum"
+    elif [[ -f /etc/arch-release ]]; then
+        OS="arch"
+        PKG_MANAGER="pacman"
     else
-        echo -e "${RED}不支持的系统${NC}"
-        exit 1
+        # 尝试检测其他系统
+        if command -v apt &>/dev/null; then
+            OS="debian"
+            PKG_MANAGER="apt"
+        elif command -v yum &>/dev/null; then
+            OS="centos"
+            PKG_MANAGER="yum"
+        elif command -v pacman &>/dev/null; then
+            OS="arch"
+            PKG_MANAGER="pacman"
+        else
+            echo -e "${RED}不支持的系统，请手动安装 sniproxy${NC}"
+            echo -e "${YELLOW}支持的系统: Debian/Ubuntu, CentOS/RHEL, Arch Linux${NC}"
+            exit 1
+        fi
     fi
+    echo -e "${GREEN}检测到系统: $OS${NC}"
 }
 
 get_public_ip() {
@@ -106,14 +123,21 @@ get_public_ip() {
 
 install_sniproxy() {
     echo -e "${GREEN}[解锁机] 安装 sniproxy...${NC}"
+    echo -e "${YELLOW}系统类型: $OS${NC}"
     
     # 安装依赖
     if [[ "$OS" == "debian" ]]; then
         apt update
         apt install -y sniproxy dnsmasq ufw
-    else
+    elif [[ "$OS" == "centos" ]]; then
         yum install -y epel-release
         yum install -y sniproxy dnsmasq firewalld
+    elif [[ "$OS" == "arch" ]]; then
+        pacman -Sy --noconfirm sniproxy dnsmasq ufw
+    else
+        echo -e "${RED}不支持的系统: $OS${NC}"
+        echo -e "${YELLOW}请手动安装 sniproxy 和 dnsmasq${NC}"
+        return 1
     fi
     
     # 备份原配置
