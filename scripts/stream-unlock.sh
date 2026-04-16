@@ -128,7 +128,38 @@ install_sniproxy() {
     # 安装依赖
     if [[ "$OS" == "debian" ]]; then
         apt update
-        apt install -y sniproxy dnsmasq ufw
+        # 先尝试直接安装
+        if ! apt install -y sniproxy 2>/dev/null; then
+            echo -e "${YELLOW}sniproxy 不在默认仓库，从源码编译...${NC}"
+            # 安装编译依赖
+            apt install -y build-essential libev-dev libudns-dev pkg-config git
+            # 克隆并编译
+            cd /tmp
+            git clone https://github.com/dlundquist/sniproxy.git
+            cd sniproxy
+            ./configure --prefix=/usr
+            make -j$(nproc)
+            make install
+            # 创建 systemd 服务
+            cat > /etc/systemd/system/sniproxy.service << 'SERVICE'
+[Unit]
+Description=sniproxy
+After=network.target
+
+[Service]
+Type=forking
+ExecStart=/usr/sbin/sniproxy -c /etc/sniproxy.conf
+PIDFile=/var/run/sniproxy.pid
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+SERVICE
+            systemctl daemon-reload
+            cd /
+            rm -rf /tmp/sniproxy
+        fi
+        apt install -y dnsmasq ufw
     elif [[ "$OS" == "centos" ]]; then
         yum install -y epel-release
         yum install -y sniproxy dnsmasq firewalld
