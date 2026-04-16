@@ -431,8 +431,10 @@ restart_smartdns() {
 
 # ============ 服务选择菜单 ============
 
+SELECTED_SERVICES=()
+
 select_services() {
-    local selected=()
+    SELECTED_SERVICES=()
     
     echo ""
     echo -e "${YELLOW}选择要解锁的服务（可多选，空格分隔）：${NC}"
@@ -452,19 +454,17 @@ select_services() {
     
     for choice in $choices; do
         case $choice in
-            1) selected+=("stream") ;;
-            2) selected+=("ai") ;;
-            3) selected+=("shorts") ;;
-            4) selected+=("spotify") ;;
-            5) selected+=("game") ;;
-            6) selected+=("chatgpt") ;;
-            7) selected+=("claude") ;;
-            8) selected=("stream" "ai" "shorts" "spotify" "game" "chatgpt" "claude"); break ;;
+            1) SELECTED_SERVICES+=("stream") ;;
+            2) SELECTED_SERVICES+=("ai") ;;
+            3) SELECTED_SERVICES+=("shorts") ;;
+            4) SELECTED_SERVICES+=("spotify") ;;
+            5) SELECTED_SERVICES+=("game") ;;
+            6) SELECTED_SERVICES+=("chatgpt") ;;
+            7) SELECTED_SERVICES+=("claude") ;;
+            8) SELECTED_SERVICES=("stream" "ai" "shorts" "spotify" "game" "chatgpt" "claude"); break ;;
             *) echo -e "${RED}无效选项: $choice${NC}" ;;
         esac
     done
-    
-    echo "${selected[@]}"
 }
 
 # ============ 主菜单 ============
@@ -497,8 +497,8 @@ menu_unlocker() {
             configure_firewall_unlocker
             ;;
         3)
-            local services=$(select_services)
-            for svc in $services; do
+            select_services
+            for svc in "${SELECTED_SERVICES[@]}"; do
                 add_service_to_sniproxy "$svc"
             done
             ;;
@@ -558,8 +558,8 @@ menu_client() {
                 return 1
             }
             
-            local services=$(select_services)
-            for svc in $services; do
+            select_services
+            for svc in "${SELECTED_SERVICES[@]}"; do
                 configure_smartdns_unlocker "$unlocker_ip" "$svc"
             done
             
@@ -568,7 +568,7 @@ menu_client() {
             echo ""
             echo -e "${GREEN}配置完成！${NC}"
             echo "解锁机: $unlocker_ip"
-            echo "分流服务: $services"
+            echo "分流服务: ${SELECTED_SERVICES[*]}"
             ;;
         2)
             local current_unlocker=$(grep "address /netflix.com/" /etc/smartdns/smartdns.conf 2>/dev/null | head -1 | awk -F'/' '{print $3}')
@@ -580,8 +580,8 @@ menu_client() {
                 unlocker_ip=${unlocker_ip:-$current_unlocker}
             fi
             
-            local services=$(select_services)
-            for svc in $services; do
+            select_services
+            for svc in "${SELECTED_SERVICES[@]}"; do
                 configure_smartdns_unlocker "$unlocker_ip" "$svc"
             done
             
