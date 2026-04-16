@@ -19,23 +19,17 @@ NC='\033[0m'
 # 服务域名配置
 declare -A SERVICE_DOMAINS
 
-# 流媒体全家桶
-SERVICE_DOMAINS["stream"]="netflix.com netflix.net nflximg.com nflximg.net nflxvideo.net nflxext.com nflxso.net
-disneyplus.com disney-plus.net dssott.com bamgrid.com
-hbomax.com hbo.com hbogo.com hbonow.com
-primevideo.com amazon.com amazon.co.jp amazon.co.uk
-paramountplus.com cbs.com
-peacocktv.com nbc.com
-apple.com apple-tv.com
-crunchyroll.com funimation.com
-tvb.com tvbanywhere.com
-bilibili.com bilibili.tv
-iq.com iqiyi.com
-youku.com"
+# Netflix + Disney+
+SERVICE_DOMAINS["netflix_disney"]="netflix.com netflix.net nflximg.com nflximg.net nflxvideo.net nflxext.com nflxso.net
+disneyplus.com disney-plus.net dssott.com bamgrid.com"
 
-# AI 服务
-SERVICE_DOMAINS["ai"]="openai.com chatgpt.com ai.com
-anthropic.com claude.ai
+# YouTube + Google
+SERVICE_DOMAINS["youtube_google"]="youtube.com youtu.be ytimg.com googlevideo.com youtubei.googleapis.com youtube-nocookie.com
+google.com googleapis.com gstatic.com"
+
+# AI 全家桶 (ChatGPT, Claude, Gemini, Copilot...)
+SERVICE_DOMAINS["ai"]="openai.com chatgpt.com ai.com oaistatic.com oaiusercontent.com auth0.openai.com
+anthropic.com claude.ai statsig.anthropic.com
 gemini.google.com generativelanguage.googleapis.com
 copilot.microsoft.com
 perplexity.ai
@@ -43,25 +37,17 @@ midjourney.com
 character.ai
 poe.com"
 
-# 短视频
-SERVICE_DOMAINS["shorts"]="tiktok.com tiktokv.com tiktokcdn.com tiktokcdn-us.com byteoversea.com musical.ly
-youtube.com youtu.be ytimg.com googlevideo.com youtubei.googleapis.com youtube-nocookie.com"
+# TikTok
+SERVICE_DOMAINS["tiktok"]="tiktok.com tiktokv.com tiktokcdn.com tiktokcdn-us.com byteoversea.com musical.ly"
+
+# HBO
+SERVICE_DOMAINS["hbo"]="hbomax.com hbo.com hbogo.com hbonow.com"
+
+# Prime Video
+SERVICE_DOMAINS["prime"]="primevideo.com amazon.com amazon.co.jp amazon.co.uk"
 
 # Spotify
 SERVICE_DOMAINS["spotify"]="spotify.com scdn.co spotifycdn.com spotifycdn.net"
-
-# 游戏相关
-SERVICE_DOMAINS["game"]="playstation.com playstation.net psn.com
-xbox.com xboxlive.com
-nintendo.com nintendo.net
-steam.com steampowered.com steamcommunity.com steamstatic.com
-epicgames.com epicgames.net"
-
-# ChatGPT 详细域名
-SERVICE_DOMAINS["chatgpt"]="openai.com chatgpt.com ai.com oaistatic.com oaiusercontent.com auth0.openai.com"
-
-# Claude 详细域名
-SERVICE_DOMAINS["claude"]="anthropic.com claude.ai statsig.anthropic.com sentry.io"
 
 # ============ 工具函数 ============
 
@@ -436,30 +422,30 @@ select_services() {
     
     echo ""
     echo -e "${YELLOW}选择要解锁的服务（可多选，空格分隔）：${NC}"
-    echo "  1) 流媒体全家桶 (Netflix, Disney+, HBO, Prime...)"
-    echo "  2) AI 服务 (ChatGPT, Claude, Gemini...)"
-    echo "  3) 短视频 (TikTok, YouTube)"
-    echo "  4) Spotify"
-    echo "  5) 游戏服务 (Steam, PlayStation, Xbox...)"
-    echo "  6) ChatGPT 详细"
-    echo "  7) Claude 详细"
+    echo "  1) Netflix + Disney+"
+    echo "  2) YouTube + Google"
+    echo "  3) AI 全家桶 (ChatGPT/Claude/Gemini/Copilot...)"
+    echo "  4) TikTok"
+    echo "  5) HBO"
+    echo "  6) Prime Video"
+    echo "  7) Spotify"
     echo "  8) 全部"
     echo ""
-    echo -e "${GREEN}示例：输入 2 只解锁 AI；输入 1 2 3 解锁流媒体+AI+短视频${NC}"
+    echo -e "${GREEN}示例：输入 3 只解锁 AI；输入 1 2 4 解锁 Netflix+YouTube+TikTok${NC}"
     echo ""
     
     read -p "请输入选项: " choices
     
     for choice in $choices; do
         case $choice in
-            1) SELECTED_SERVICES+=("stream") ;;
-            2) SELECTED_SERVICES+=("ai") ;;
-            3) SELECTED_SERVICES+=("shorts") ;;
-            4) SELECTED_SERVICES+=("spotify") ;;
-            5) SELECTED_SERVICES+=("game") ;;
-            6) SELECTED_SERVICES+=("chatgpt") ;;
-            7) SELECTED_SERVICES+=("claude") ;;
-            8) SELECTED_SERVICES=("stream" "ai" "shorts" "spotify" "game" "chatgpt" "claude"); break ;;
+            1) SELECTED_SERVICES+=("netflix_disney") ;;
+            2) SELECTED_SERVICES+=("youtube_google") ;;
+            3) SELECTED_SERVICES+=("ai") ;;
+            4) SELECTED_SERVICES+=("tiktok") ;;
+            5) SELECTED_SERVICES+=("hbo") ;;
+            6) SELECTED_SERVICES+=("prime") ;;
+            7) SELECTED_SERVICES+=("spotify") ;;
+            8) SELECTED_SERVICES=("netflix_disney" "youtube_google" "ai" "tiktok" "hbo" "prime" "spotify"); break ;;
             *) echo -e "${RED}无效选项: $choice${NC}" ;;
         esac
     done
