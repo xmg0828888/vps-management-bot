@@ -362,22 +362,15 @@ install_smartdns() {
     mkdir -p /etc/smartdns
     cat > /etc/smartdns/smartdns.conf << 'EOF'
 # SmartDNS 配置
-
-# 监听端口
 bind :53
 
-# 上游 DNS
-server 8.8.8.8 -group default
-server 1.1.1.1 -group default
-server 223.5.5.5 -group default
+# 上游 DNS（简化格式，兼容 apt 版本）
+server 8.8.8.8
+server 1.1.1.1
+server 223.5.5.5
 
 # 缓存配置
 cache-size 4096
-cache-persist yes
-prefetch-domain yes
-
-# 日志
-log-level info
 EOF
     
     echo -e "${GREEN}[被解锁机] smartdns 安装完成${NC}"
@@ -411,9 +404,13 @@ configure_smartdns_unlocker() {
 }
 
 restart_smartdns() {
+    # 先杀掉可能存在的旧进程
+    pkill -9 smartdns 2>/dev/null || true
+    sleep 1
+    
     systemctl daemon-reload
     systemctl enable smartdns
-    systemctl restart smartdns
+    systemctl start smartdns
     
     # 设置系统 DNS
     if command -v resolvconf &>/dev/null; then
@@ -421,6 +418,7 @@ restart_smartdns() {
     else
         # 备份原 DNS 配置
         cp /etc/resolv.conf /etc/resolv.conf.bak 2>/dev/null || true
+        chattr -i /etc/resolv.conf 2>/dev/null || true
         echo "nameserver 127.0.0.1" > /etc/resolv.conf
         # 防止被覆盖
         chattr +i /etc/resolv.conf 2>/dev/null || true
