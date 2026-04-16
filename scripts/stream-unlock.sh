@@ -304,31 +304,56 @@ add_service_to_sniproxy() {
 install_smartdns() {
     echo -e "${GREEN}[被解锁机] 安装 smartdns...${NC}"
     
-    # 下载并安装 smartdns
-    local smartdns_url="https://github.com/pymumu/smartdns/releases/download/Release42/smartdns.1.2024.02.24-2227.x86_64-linux-all.tar.gz"
-    local tmp_dir="/tmp/smartdns"
-    
-    mkdir -p "$tmp_dir"
-    cd "$tmp_dir"
-    
-    if ! curl -sL "$smartdns_url" -o smartdns.tar.gz; then
-        echo -e "${RED}下载 smartdns 失败，尝试备用方式...${NC}"
-        # 尝试 apt 安装
-        if [[ "$OS" == "debian" ]]; then
-            apt update
-            apt install -y smartdns || {
-                echo -e "${RED}apt 安装 smartdns 失败，请手动安装${NC}"
+    # 方法1: 尝试 apt 安装
+    if [[ "$OS" == "debian" ]]; then
+        # 添加 smartdns 官方源或直接安装
+        if apt install -y smartdns 2>/dev/null; then
+            echo -e "${GREEN}通过 apt 安装 smartdns 成功${NC}"
+        else
+            echo -e "${YELLOW}apt 安装失败，尝试手动下载...${NC}"
+            
+            # 获取最新版本
+            local latest_url=$(curl -s https://api.github.com/repos/pymumu/smartdns/releases/latest | grep 'browser_download_url.*x86_64-linux-all.tar.gz' | head -1 | cut -d'"' -f4)
+            
+            if [[ -z "$latest_url" ]]; then
+                # 备用下载地址
+                latest_url="https://github.com/pymumu/smartdns/releases/download/Release45/smartdns.1.2024.08.08-1827.x86_64-linux-all.tar.gz"
+            fi
+            
+            echo -e "${YELLOW}下载: $latest_url${NC}"
+            local tmp_dir="/tmp/smartdns"
+            mkdir -p "$tmp_dir"
+            cd "$tmp_dir"
+            
+            if curl -sL "$latest_url" -o smartdns.tar.gz && tar -xzf smartdns.tar.gz; then
+                chmod +x smartdns
+                ./smartdns install -u
+            else
+                echo -e "${RED}下载安装失败，请手动安装 smartdns${NC}"
+                echo -e "${YELLOW}参考: https://github.com/pymumu/smartdns${NC}"
                 return 1
-            }
+            fi
+            
+            cd -
+            rm -rf "$tmp_dir"
+        fi
+    elif [[ "$OS" == "centos" ]]; then
+        # CentOS 尝试 yum 或手动下载
+        if ! yum install -y smartdns 2>/dev/null; then
+            local latest_url=$(curl -s https://api.github.com/repos/pymumu/smartdns/releases/latest | grep 'browser_download_url.*x86_64-linux-all.tar.gz' | head -1 | cut -d'"' -f4)
+            [[ -z "$latest_url" ]] && latest_url="https://github.com/pymumu/smartdns/releases/download/Release45/smartdns.1.2024.08.08-1827.x86_64-linux-all.tar.gz"
+            
+            local tmp_dir="/tmp/smartdns"
+            mkdir -p "$tmp_dir"
+            cd "$tmp_dir"
+            curl -sL "$latest_url" -o smartdns.tar.gz && tar -xzf smartdns.tar.gz && chmod +x smartdns && ./smartdns install -u
+            cd -
+            rm -rf "$tmp_dir"
         fi
     else
-        tar -xzf smartdns.tar.gz
-        chmod +x smartdns
-        ./smartdns install -u
+        echo -e "${RED}不支持的系统，请手动安装 smartdns${NC}"
+        return 1
     fi
-    
-    cd -
-    rm -rf "$tmp_dir"
     
     # 备份原配置
     [[ -f /etc/smartdns/smartdns.conf ]] && cp /etc/smartdns/smartdns.conf /etc/smartdns/smartdns.conf.bak
