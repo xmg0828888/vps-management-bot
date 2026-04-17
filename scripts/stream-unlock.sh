@@ -27,7 +27,7 @@
 set -Eeuo pipefail
 
 # ============ 常量 ============
-readonly SCRIPT_VERSION="2.3"
+readonly SCRIPT_VERSION="3.0"
 readonly LOG_FILE="/var/log/stream-unlock.log"
 readonly BACKUP_ROOT="/etc/stream-unlock-backup"
 readonly STATE_FILE="/etc/stream-unlock.state"
@@ -406,6 +406,77 @@ EOF
     ok "sniproxy.conf 已写入 (服务数: ${#SELECTED_SERVICES[@]})"
 }
 
+setup_unlocker_dns() {
+    # sniproxy 不支持 IPv6 出口, 必须:
+    # 1) 内核级禁 IPv6 防止 sniproxy 尝试连接 IPv6 地址
+    # 2) 用 dnsmasq filter-AAAA 确保 DNS 不返回 IPv6 记录
+    info "配置解锁机 DNS (禁 IPv6 + dnsmasq filter-AAAA)..."
+
+    # 内核禁 IPv6
+    sysctl -w net.ipv6.conf.all.disable_ipv6=1 >/dev/null
+    sysctl -w net.ipv6.conf.default.disable_ipv6=1 >/dev/null
+    if ! grep -q 'disable_ipv6.*stream-unlock' /etc/sysctl.conf 2>/dev/null; then
+        {
+            echo '# stream-unlock: 禁 IPv6 (sniproxy 不支持 IPv6 出口)'
+            echo 'net.ipv6.conf.all.disable_ipv6=1'
+            echo 'net.ipv6.conf.default.disable_ipv6=1'
+        } >> /etc/sysctl.conf
+    fi
+    ok "IPv6 已禁用"
+
+    # 安装 dnsmasq
+    if ! command -v dnsmasq >/dev/null 2>&1; then
+        info "安装 dnsmasq..."
+        pkg_install dnsmasq
+    fi
+
+    # dnsmasq 配置: 只监听本地, filter-AAAA
+    cat > /etc/dnsmasq.conf <<'EOF'
+# stream-unlock managed: 解锁机本地 DNS, 过滤 AAAA
+listen-address=127.0.0.1
+port=53
+no-resolv
+server=1.1.1.1
+server=8.8.8.8
+filter-AAAA
+EOF
+
+    # resolv.conf 指向本地 dnsmasq
+    chattr -i /etc/resolv.conf 2>/dev/null || true
+    [[ -L /etc/resolv.conf ]] && rm -f /etc/resolv.conf
+    echo 'nameserver 127.0.0.1' > /etc/resolv.conf
+
+    systemctl enable dnsmasq >/dev/null 2>&1
+    systemctl restart dnsmasq
+    sleep 1
+    systemctl is-active --quiet dnsmasq \
+        && ok "dnsmasq 运行中 (filter-AAAA)" \
+        || warn "dnsmasq 启动失败, sniproxy 可能尝试 IPv6 连接"
+}
+
+unlocker_self_test() {
+    echo ""
+    info "自测: 通过本机 sniproxy 转发测试..."
+    local domain status ok_count=0 fail_count=0
+    for domain in www.netflix.com www.youtube.com open.spotify.com; do
+        status=$(curl -4 -sI --resolve "${domain}:443:127.0.0.1" --max-time 8 "https://${domain}" 2>/dev/null \
+            | head -1 | tr -d '\r' || true)
+        if [[ -n "$status" ]]; then
+            ok "$domain -> $status"
+            ((ok_count++)) || true
+        else
+            err "$domain -> 超时/无响应"
+            ((fail_count++)) || true
+        fi
+    done
+    echo ""
+    if [[ $ok_count -gt 0 ]]; then
+        ok "自测通过 $ok_count 个服务, 失败 $fail_count 个"
+    else
+        warn "所有自测均失败, 请检查 sniproxy 日志: journalctl -u sniproxy"
+    fi
+}
+
 install_sniproxy() {
     snapshot_configs
     info "安装 sniproxy..."
@@ -427,12 +498,14 @@ install_sniproxy() {
     info "sniproxy 二进制: $bin"
     sniproxy_write_systemd_unit "$bin"
     sniproxy_write_config
+    setup_unlocker_dns
     systemctl enable sniproxy >/dev/null
     systemctl restart sniproxy
     sleep 1
     systemctl is-active --quiet sniproxy \
         && ok "sniproxy 运行中" \
         || die "sniproxy 启动失败, 查看 journalctl -u sniproxy"
+    unlocker_self_test
 }
 
 # ============ smartdns 安装 ============
@@ -850,6 +923,22 @@ cmd_uninstall() {
                 dnf|yum) "$PKG" remove -y sniproxy 2>/dev/null || true ;;
                 pacman) pacman -Rns --noconfirm sniproxy 2>/dev/null || true ;;
             esac
+            # 清理 dnsmasq + 恢复 IPv6
+            systemctl disable --now dnsmasq 2>/dev/null || true
+            rm -f /etc/dnsmasq.conf
+            case "$PKG" in
+                apt) apt-get remove -y dnsmasq 2>/dev/null || true ;;
+                dnf|yum) "$PKG" remove -y dnsmasq 2>/dev/null || true ;;
+            esac
+            sed -i '/stream-unlock.*disable_ipv6/d; /disable_ipv6=1/d' /etc/sysctl.conf 2>/dev/null || true
+            sysctl -w net.ipv6.conf.all.disable_ipv6=0 2>/dev/null || true
+            sysctl -w net.ipv6.conf.default.disable_ipv6=0 2>/dev/null || true
+            # 还原 resolv.conf
+            chattr -i /etc/resolv.conf 2>/dev/null || true
+            cat > /etc/resolv.conf <<'EOF'
+nameserver 1.1.1.1
+nameserver 8.8.8.8
+EOF
             ;;
         client)
             systemctl disable --now smartdns 2>/dev/null || true
