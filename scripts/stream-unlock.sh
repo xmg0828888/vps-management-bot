@@ -509,7 +509,7 @@ install_smartdns() {
     [[ -f "$SMARTDNS_CONF" ]] || cat > "$SMARTDNS_CONF" <<'EOF'
 # smartdns.conf - stream-unlock managed
 bind :53
-bind [::]:53
+# bind [::]:53  # 按需启用, 部分系统 IPv6 bind 会冲突
 
 # 上游
 server 1.1.1.1
