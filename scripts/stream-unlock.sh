@@ -27,7 +27,7 @@
 set -Eeuo pipefail
 
 # ============ 常量 ============
-readonly SCRIPT_VERSION="2.0"
+readonly SCRIPT_VERSION="2.1"
 readonly LOG_FILE="/var/log/stream-unlock.log"
 readonly BACKUP_ROOT="/etc/stream-unlock-backup"
 readonly STATE_FILE="/etc/stream-unlock.state"
@@ -94,6 +94,8 @@ die()   { err "$@"; exit 1; }
 
 on_err() {
     local rc=$? cmd=${BASH_COMMAND:-?} line=${BASH_LINENO[0]:-?}
+    # 141 = SIGPIPE, 管道正常关闭 (head/awk -exit 等), 不是真错误
+    [[ $rc -eq 141 ]] && return 0
     err "第 ${line} 行执行失败 (退出码 $rc): $cmd"
     err "请查看日志: $LOG_FILE"
     exit $rc
@@ -246,7 +248,7 @@ fw_has_iptables_drop_policy() {
 fw_allow_ssh_first() {
     # 在启用 ufw / firewalld 之前无条件保证 SSH 不被锁
     local ssh_port
-    ssh_port="$(sshd -T 2>/dev/null | awk '/^port /{print $2; exit}')"
+    ssh_port="$(sshd -T 2>/dev/null | grep -oP '^port \K\d+' || true)"
     [[ -z "$ssh_port" ]] && ssh_port=22
     case "$OS" in
         debian|arch)
