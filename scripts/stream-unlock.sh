@@ -27,7 +27,7 @@
 set -Eeuo pipefail
 
 # ============ 常量 ============
-readonly SCRIPT_VERSION="2.2"
+readonly SCRIPT_VERSION="2.3"
 readonly LOG_FILE="/var/log/stream-unlock.log"
 readonly BACKUP_ROOT="/etc/stream-unlock-backup"
 readonly STATE_FILE="/etc/stream-unlock.state"
@@ -267,14 +267,27 @@ fw_allow_ssh_first() {
 fw_enable_unlocker() {
     # 放 80/443 给指定 IP, 启用防火墙
     local ip
-    if fw_has_iptables_drop_policy && [[ $FORCE -ne 1 ]]; then
+    # 检测是否有防火墙工具
+    local fw_tool=""
+    if command -v ufw >/dev/null 2>&1; then
+        fw_tool="ufw"
+    elif command -v firewall-cmd >/dev/null 2>&1; then
+        fw_tool="firewalld"
+    elif command -v iptables >/dev/null 2>&1; then
+        fw_tool="iptables"
+    else
+        warn "未检测到防火墙工具 (ufw/firewalld/iptables)"
+        warn "跳过防火墙配置, 请手动放行 80/443 端口给被解锁机 IP"
+        return 0
+    fi
+    if [[ "$fw_tool" == "ufw" ]] && fw_has_iptables_drop_policy && [[ $FORCE -ne 1 ]]; then
         warn "检测到 iptables 已有 DROP 策略; 启用 ufw 可能覆盖现有规则"
         warn "如果你清楚自己在做什么, 用 --force 跳过此检查"
         return 1
     fi
     fw_allow_ssh_first
-    case "$OS" in
-        debian|arch)
+    case "$fw_tool" in
+        ufw)
             for ip in "${SELECTED_IPS[@]}"; do
                 ufw allow from "$ip" to any port 80 proto tcp  >/dev/null
                 ufw allow from "$ip" to any port 443 proto tcp >/dev/null
@@ -282,7 +295,7 @@ fw_enable_unlocker() {
             done
             ufw --force enable >/dev/null
             ;;
-        rhel)
+        firewalld)
             for ip in "${SELECTED_IPS[@]}"; do
                 firewall-cmd --permanent \
                   --add-rich-rule="rule family=ipv4 source address=$ip port port=80 protocol=tcp accept" >/dev/null
@@ -291,6 +304,13 @@ fw_enable_unlocker() {
                 ok "放行 $ip -> 80,443"
             done
             firewall-cmd --reload >/dev/null
+            ;;
+        iptables)
+            for ip in "${SELECTED_IPS[@]}"; do
+                iptables -I INPUT -s "$ip" -p tcp --dport 80 -j ACCEPT 2>/dev/null || true
+                iptables -I INPUT -s "$ip" -p tcp --dport 443 -j ACCEPT 2>/dev/null || true
+                ok "放行 $ip -> 80,443 (iptables)"
+            done
             ;;
     esac
 }
