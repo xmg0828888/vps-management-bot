@@ -27,7 +27,7 @@
 set -Eeuo pipefail
 
 # ============ 常量 ============
-readonly SCRIPT_VERSION="2.1"
+readonly SCRIPT_VERSION="2.2"
 readonly LOG_FILE="/var/log/stream-unlock.log"
 readonly BACKUP_ROOT="/etc/stream-unlock-backup"
 readonly STATE_FILE="/etc/stream-unlock.state"
@@ -132,18 +132,19 @@ detect_os() {
 }
 
 check_ipv4() {
-    # 需要至少一个全球可达 IPv4; 允许 NAT 后面的机器 (家庭/内网) 但提示
-    local ipv4
-    ipv4=$(curl -4 -fsS --max-time 5 https://api.ipify.org 2>/dev/null || true)
-    if [[ -z "$ipv4" ]]; then
-        warn "未检测到 IPv4 出口; 如果本机只有 IPv6, 此脚本无法工作"
-        if [[ $FORCE -ne 1 ]]; then
-            die "加 --force 可强行继续"
+    local ipv4="" src
+    for src in "https://api.ipify.org" "https://ifconfig.me" "http://ip.sb" "http://whatismyip.akamai.com"; do
+        ipv4=$(curl -4 -fsS --max-time 8 "$src" 2>/dev/null | tr -d '[:space:]' || true)
+        if [[ "$ipv4" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            info "IPv4 公网地址: $ipv4 (via $src)"
+            echo "$ipv4"
+            return 0
         fi
-    else
-        info "IPv4 公网地址: $ipv4"
+    done
+    warn "未检测到 IPv4 出口; 如果本机只有 IPv6, 此脚本无法工作"
+    if [[ $FORCE -ne 1 ]]; then
+        die "加 --force 可强行继续"
     fi
-    echo "$ipv4"
 }
 
 get_public_ip() {
