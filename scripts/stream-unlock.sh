@@ -313,16 +313,9 @@ Documentation=https://github.com/dlundquist/sniproxy
 [Service]
 Type=forking
 ExecStart=$bin -c $SNIPROXY_CONF
-PIDFile=/var/run/sniproxy.pid
+PIDFile=/run/sniproxy.pid
 Restart=on-failure
 RestartSec=3
-# 最低权限
-AmbientCapabilities=CAP_NET_BIND_SERVICE
-CapabilityBoundingSet=CAP_NET_BIND_SERVICE
-NoNewPrivileges=yes
-ProtectSystem=full
-ProtectHome=yes
-PrivateTmp=yes
 
 [Install]
 WantedBy=multi-user.target
@@ -356,8 +349,8 @@ sniproxy_write_config() {
 # sniproxy.conf - stream-unlock managed
 # 只解析 SNI 转发, 不做 DNS
 
-user daemon
-pidfile /var/run/sniproxy.pid
+# user daemon  # 不切用户, systemd 管权限
+pidfile /run/sniproxy.pid
 
 error_log {
     syslog daemon
