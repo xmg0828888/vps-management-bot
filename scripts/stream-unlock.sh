@@ -570,7 +570,8 @@ dns=none
 EOF
         systemctl reload NetworkManager 2>/dev/null || true
     fi
-    # 写 resolv.conf (如果是 symlink 先删)
+    # 写 resolv.conf (解锁 chattr / 删 symlink)
+    chattr -i /etc/resolv.conf 2>/dev/null || true
     [[ -L /etc/resolv.conf ]] && rm -f /etc/resolv.conf
     cat > /etc/resolv.conf <<'EOF'
 # Managed by stream-unlock
@@ -862,6 +863,7 @@ cmd_uninstall() {
                 pacman) pacman -Rns --noconfirm smartdns 2>/dev/null || true ;;
             esac
             # 还原 resolv.conf
+            chattr -i /etc/resolv.conf 2>/dev/null || true
             if [[ -f /etc/resolv.conf ]] && grep -q 'Managed by stream-unlock' /etc/resolv.conf; then
                 cat > /etc/resolv.conf <<'EOF'
 nameserver 1.1.1.1
