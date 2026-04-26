@@ -608,6 +608,12 @@ def format_price(node: Node) -> str:
     return f"{amount:.2f} {currency}/{cycle_label(node.price_cycle)}"
 
 
+def next_renewal_date_text(node: Node) -> str:
+    if not int(node.expires_at or 0):
+        return "未设置"
+    return format_expiry(node.expires_at)
+
+
 def annual_cost_total():
     return round(monthly_cost_total() * 12, 2)
 
@@ -657,7 +663,7 @@ async def monitor_once(app: Application):
             set_node_state(node.id, fail_count, is_online, str(e))
 
         if int(node.expires_at or 0) > 0 and expire_days > 0:
-            days_left = math.floor((int(node.expires_at) - now) / 86400)
+            days_left = math.ceil((int(node.expires_at) - now) / 86400)
             exp_state = get_expiry_state(node.id)
             remind_points = sorted({expire_days, 7, 3, 0}, reverse=True)
             should_notify = False
@@ -1169,6 +1175,7 @@ async def show_billing_menu(query, node_id: int):
             [InlineKeyboardButton("改备注", callback_data=f"node:editfield:{node_id}:remark"), InlineKeyboardButton("改金额", callback_data=f"node:editfield:{node_id}:monthly_price")],
             [InlineKeyboardButton("周期", callback_data=f"node:cycle:{node_id}"), InlineKeyboardButton("货币", callback_data=f"node:currency:{node_id}")],
             [InlineKeyboardButton("改到期日", callback_data=f"node:editfield:{node_id}:expires_at")],
+            [InlineKeyboardButton("💳 标记已续费", callback_data=f"node:renew:{node_id}")],
             [InlineKeyboardButton("⬅️ 返回节点", callback_data=f"node:view:{node_id}")],
         ]),
     )
@@ -1204,6 +1211,50 @@ async def show_currency_menu(query, node_id: int):
             [InlineKeyboardButton("USD", callback_data=f"node:setcurrency:{node_id}:USD"), InlineKeyboardButton("HKD", callback_data=f"node:setcurrency:{node_id}:HKD")],
             [InlineKeyboardButton("TWD", callback_data=f"node:setcurrency:{node_id}:TWD")],
             [InlineKeyboardButton("⬅️ 返回账单", callback_data=f"node:billing:{node_id}")],
+        ]),
+    )
+
+
+async def renew_node(query, node_id: int):
+    node = load_node(node_id)
+    if not node:
+        await query.edit_message_text("节点不存在", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 首页", callback_data="home")]]))
+        return
+    if not int(node.expires_at or 0):
+        await query.edit_message_text(
+            f"<b>{esc(node.name)}</b> 还没设置到期日，没法直接续费。",
+            parse_mode=ParseMode.HTML,
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ 返回账单", callback_data=f"node:billing:{node_id}")]]),
+        )
+        return
+    cycle = (node.price_cycle or "month").lower()
+    months_map = {"month": 1, "quarter": 3, "year": 12}
+    if cycle not in months_map:
+        await query.edit_message_text(
+            f"<b>{esc(node.name)}</b> 的账单周期 <code>{esc(cycle)}</code> 暂不支持自动续费。",
+            parse_mode=ParseMode.HTML,
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ 返回账单", callback_data=f"node:billing:{node_id}")]]),
+        )
+        return
+    current = datetime.fromtimestamp(int(node.expires_at))
+    import calendar
+    month_index = current.month - 1 + months_map[cycle]
+    year = current.year + month_index // 12
+    month = month_index % 12 + 1
+    day = min(current.day, calendar.monthrange(year, month)[1])
+    new_dt = current.replace(year=year, month=month, day=day)
+    update_node_field(node_id, "expires_at", int(new_dt.timestamp()))
+    conn = db()
+    conn.execute("INSERT INTO expiry_state(node_id,last_days_left,last_notified_at) VALUES(?,?,?) ON CONFLICT(node_id) DO UPDATE SET last_days_left=excluded.last_days_left,last_notified_at=excluded.last_notified_at", (node_id, 999999, 0))
+    conn.commit()
+    conn.close()
+    node = load_node(node_id)
+    await query.edit_message_text(
+        f"✅ <b>{esc(node.name)}</b> 已续费\n\n账单：<code>{esc(format_price(node))}</code>\n新到期：<code>{esc(format_expiry(node.expires_at))}</code>\n剩余：<code>{esc(days_left_text(node.expires_at))}</code>",
+        parse_mode=ParseMode.HTML,
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("💰 返回账单", callback_data=f"node:billing:{node_id}")],
+            [InlineKeyboardButton("📄 返回节点", callback_data=f"node:view:{node_id}")],
         ]),
     )
 
@@ -1550,6 +1601,8 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         _, _, node_id, currency = data.split(":", 3)
         update_node_field(int(node_id), "price_currency", currency.upper())
         await show_billing_menu(q, int(node_id))
+    elif data.startswith("node:renew:"):
+        await renew_node(q, int(data.split(":")[-1]))
     elif data.startswith("node:edit:"):
         await show_edit_menu(q, int(data.split(":")[-1]))
     elif data.startswith("node:editfield:"):
